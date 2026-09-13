@@ -5,7 +5,17 @@ import { afterEach, describe, expect, test, vi } from "vitest";
 import * as usage from "../extensions/usage.ts";
 
 type CustomCallback = Parameters<ExtensionUIContext["custom"]>[0];
+
 type CustomKeybindings = Parameters<CustomCallback>[2];
+
+type ResetCountFixture = number | string | boolean | null | undefined;
+
+type ResetCreditsFixture =
+  | { available_count?: ResetCountFixture; applicable_available_count?: ResetCountFixture }
+  | number
+  | readonly (readonly never[])[]
+  | null
+  | undefined;
 
 function unreadCallbackValue<T>(): T {
   // SAFETY: The caller uses this only for custom-component callback values that the factory deliberately ignores.
@@ -13,6 +23,7 @@ function unreadCallbackValue<T>(): T {
 }
 
 const FETCHED_AT = 1_788_685_700_000;
+
 const responseFixture = {
   user_id: "test-user",
   account_id: "test-account",
@@ -40,13 +51,14 @@ const responseFixture = {
     has_credits: false,
     unlimited: false,
     balance: "0",
-    approx_local_messages: [0, 0] as [number, number],
-    approx_cloud_messages: [0, 0] as [number, number],
+    approx_local_messages: [0, 0],
+    approx_cloud_messages: [0, 0],
   },
   promo: null,
 };
 
-function snapshot(resetCredits: unknown) {
+function snapshot(resetCredits: ResetCreditsFixture) {
+  // SAFETY: Malformed reset-credit fixtures deliberately exceed the decoded production type to verify defensive rendering.
   return usage.normalizeChatGptSnapshot(
     {
       ...responseFixture,
@@ -56,7 +68,7 @@ function snapshot(resetCredits: unknown) {
   );
 }
 
-function resetCard(resetCredits: unknown) {
+function resetCard(resetCredits: ResetCreditsFixture) {
   return snapshot(resetCredits).cards.find((card) => card.title === "Usage limit resets");
 }
 
@@ -144,34 +156,42 @@ describe("/usage reset credits", () => {
       if (String(file).endsWith("/.codex/auth.json")) {
         return JSON.stringify({ tokens: { access_token: "test-codex-token" } });
       }
+
       if (String(file).endsWith("/.pi/agent/auth.json")) {
         return JSON.stringify({ openrouter: { key: "test-openrouter-key" } });
       }
+
       throw new Error(`Unexpected file read: ${file}`);
     });
     vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
       const url = String(input);
       requests.push({ url, method: init?.method ?? "GET" });
       expect(init?.signal).toBeInstanceOf(AbortSignal);
+
       if (url === "https://chatgpt.com/backend-api/wham/usage") {
         return Response.json({
           ...responseFixture,
           rate_limit_reset_credits: {
             available_count: available,
-            applicable_available_count: 0,
+            applicable_available_count: available === 3 ? 0 : "malformed",
           },
         });
       }
+
       if (url === "https://openrouter.ai/api/v1/key") {
         return Response.json({ data: { usage_daily: 0, is_free_tier: false } });
       }
+
       if (url === "https://openrouter.ai/api/v1/credits") {
         return Response.json({ data: { total_credits: 10, total_usage: 2 } });
       }
+
       throw new Error(`Unexpected request: ${url}`);
     });
 
     let handler!: (args: string, ctx: ExtensionCommandContext) => Promise<void>;
+
+    // SAFETY: The extension test double implements the only API member read during registration.
     usage.default({
       registerCommand(name, command) {
         expect(name).toBe("usage");
@@ -181,15 +201,21 @@ describe("/usage reset credits", () => {
 
     let component!: Component;
     let ready!: () => void;
+
     const nextReadyRender = () =>
       new Promise<void>((resolve) => {
         ready = resolve;
       });
+
+    // SAFETY: The component exercises only foreground coloring and bold styling from the injected theme.
     const theme = {
       fg: (_tone: string, text: string) => text,
       bold: (text: string) => text,
     } as Theme;
+
     let closed = false;
+
+    // SAFETY: The command test double supplies every context member the /usage handler reads.
     await handler("", {
       hasUI: true,
       model: { provider: "openai-codex", id: "gpt-5" },
@@ -229,6 +255,7 @@ describe("/usage reset credits", () => {
     await refreshed;
     expect(component.render(120).join("\n")).toContain("2 available");
     expect(component.render(120).join("\n")).not.toContain("3 available");
+    expect(component.render(120).join("\n")).not.toContain("Currently applicable");
     expect(requests).toHaveLength(6);
     expect(requests.every((request) => request.method === "GET")).toBe(true);
     expect(requests.filter((request) => request.url.includes("chatgpt.com"))).toEqual([
@@ -267,6 +294,7 @@ describe("normalizeChatGptSnapshot reset credits", () => {
         available_count: 3,
         applicable_available_count: applicable,
       });
+
       expect(card?.value).toBe("3 available");
       expect(card?.subtitle).toBeUndefined();
     },

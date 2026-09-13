@@ -4,7 +4,9 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+
 const executableName = process.platform === "win32" ? "prek.cmd" : "prek";
+
 const prek = resolve(repositoryRoot, "node_modules", ".bin", executableName);
 
 // Pi installs Git packages with production dependencies. Hook installation is

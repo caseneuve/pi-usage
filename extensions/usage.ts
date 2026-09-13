@@ -3,79 +3,110 @@ import os from "node:os";
 import path from "node:path";
 import type { ExtensionAPI, Theme } from "@earendil-works/pi-coding-agent";
 import { Key, matchesKey, truncateToWidth, visibleWidth, wrapTextWithAnsi } from "@earendil-works/pi-tui";
+import { type Static, Type } from "typebox";
+import { Value } from "typebox/value";
 
 type ModelLike = {
   id: string;
   provider: string;
 };
 
-type UsageWindow = {
-  used_percent: number;
-  limit_window_seconds: number;
-  reset_after_seconds: number;
-  reset_at: number;
+const UsageWindowSchema = Type.Object({
+  used_percent: Type.Number(),
+  limit_window_seconds: Type.Number(),
+  reset_after_seconds: Type.Number(),
+  reset_at: Type.Number(),
+});
+
+type UsageWindow = Static<typeof UsageWindowSchema>;
+
+const UsageRateLimitSchema = Type.Object({
+  allowed: Type.Boolean(),
+  limit_reached: Type.Boolean(),
+  primary_window: Type.Union([UsageWindowSchema, Type.Null()]),
+  secondary_window: Type.Union([UsageWindowSchema, Type.Null()]),
+});
+
+const ResetCountSchema = Type.Integer({ minimum: 0, maximum: Number.MAX_SAFE_INTEGER });
+
+const ChatGptWhamUsageResponseSchema = Type.Object({
+  email: Type.String(),
+  plan_type: Type.String(),
+  rate_limit: Type.Union([UsageRateLimitSchema, Type.Null()]),
+  credits: Type.Union([
+    Type.Object({
+      has_credits: Type.Boolean(),
+      unlimited: Type.Boolean(),
+      balance: Type.String(),
+    }),
+    Type.Null(),
+  ]),
+});
+
+type ResetCredits = {
+  available_count?: number;
+  applicable_available_count?: number;
 };
 
-type UsageRateLimit = {
-  allowed: boolean;
-  limit_reached: boolean;
-  primary_window: UsageWindow | null;
-  secondary_window: UsageWindow | null;
+export type ChatGptWhamUsageResponse = Static<typeof ChatGptWhamUsageResponseSchema> & {
+  rate_limit_reset_credits?: ResetCredits | null;
 };
 
-type UsageCredits = {
-  has_credits: boolean;
-  unlimited: boolean;
-  balance: string;
-  approx_local_messages: [number, number];
-  approx_cloud_messages: [number, number];
-};
+const AvailableResetCountProjectionSchema = Type.Object({
+  rate_limit_reset_credits: Type.Object({ available_count: Type.Number() }),
+});
 
-type ChatGptWhamUsageResponse = {
-  user_id: string;
-  account_id: string;
-  email: string;
-  plan_type: string;
-  rate_limit: UsageRateLimit | null;
-  code_review_rate_limit: UsageRateLimit | null;
-  rate_limit_reset_credits?: {
-    available_count?: number | null;
-    applicable_available_count?: number | null;
-  } | null;
-  additional_rate_limits: unknown;
-  credits: UsageCredits | null;
-  promo: unknown;
-};
+const ApplicableResetCountProjectionSchema = Type.Object({
+  rate_limit_reset_credits: Type.Object({ applicable_available_count: Type.Number() }),
+});
 
-type OpenRouterKeyData = {
-  label: string | null;
-  is_management_key: boolean;
-  is_provisioning_key: boolean;
-  limit: number | null;
-  limit_reset: string | null;
-  limit_remaining: number | null;
-  include_byok_in_limit: boolean;
-  usage: number | null;
-  usage_daily: number | null;
-  usage_weekly: number | null;
-  usage_monthly: number | null;
-  byok_usage: number | null;
-  byok_usage_daily: number | null;
-  byok_usage_weekly: number | null;
-  byok_usage_monthly: number | null;
-  is_free_tier: boolean;
-  expires_at: string | null;
-  creator_user_id: string | null;
-  rate_limit: {
-    requests: number;
-    interval: string;
-    note?: string;
-  } | null;
-};
+type AvailableResetCountProjection = Static<typeof AvailableResetCountProjectionSchema>;
 
-type OpenRouterKeyResponse = {
-  data: OpenRouterKeyData;
-};
+type ApplicableResetCountProjection = Static<typeof ApplicableResetCountProjectionSchema>;
+
+const OpenRouterKeyResponseSchema = Type.Object({
+  data: Type.Object({
+    label: Type.Optional(Type.Union([Type.String(), Type.Null()])),
+    usage_daily: Type.Optional(Type.Union([Type.Number(), Type.Null()])),
+    is_free_tier: Type.Boolean(),
+    expires_at: Type.Optional(Type.Union([Type.String(), Type.Null()])),
+  }),
+});
+
+type OpenRouterKeyResponse = Static<typeof OpenRouterKeyResponseSchema>;
+
+const CreditAmountSchema = Type.Union([Type.Number(), Type.String(), Type.Null()]);
+
+const OpenRouterCreditFieldsSchema = Type.Object({
+  remaining_credits: Type.Optional(CreditAmountSchema),
+  available_credits: Type.Optional(CreditAmountSchema),
+  total_credits: Type.Optional(CreditAmountSchema),
+  totalCredits: Type.Optional(CreditAmountSchema),
+  total: Type.Optional(CreditAmountSchema),
+  total_usage: Type.Optional(CreditAmountSchema),
+  usage: Type.Optional(CreditAmountSchema),
+  used: Type.Optional(CreditAmountSchema),
+  spent: Type.Optional(CreditAmountSchema),
+});
+
+const OpenRouterCreditsResponseSchema = Type.Intersect([
+  OpenRouterCreditFieldsSchema,
+  Type.Object({ data: Type.Optional(OpenRouterCreditFieldsSchema) }),
+]);
+
+type OpenRouterCreditFields = Static<typeof OpenRouterCreditFieldsSchema>;
+
+type OpenRouterCreditsResponse = Static<typeof OpenRouterCreditsResponseSchema>;
+
+const CodexAuthSchema = Type.Object({
+  tokens: Type.Optional(Type.Object({ access_token: Type.Optional(Type.String()) })),
+});
+
+const PiAuthSchema = Type.Object({
+  openrouter: Type.Optional(Type.Object({ key: Type.Optional(Type.String()) })),
+});
+
+type PiAuth = Static<typeof PiAuthSchema>;
 
 type UsageCardTone = "success" | "warning" | "error" | "muted" | "accent";
 
@@ -115,39 +146,70 @@ type ComponentState =
   | { kind: "error"; message: string };
 
 const COMMAND_NAME = "usage";
+
 const HOME_DIR = process.env.HOME || os.homedir();
+
 const AUTH_PATH = path.join(HOME_DIR, ".codex", "auth.json");
+
 const PI_AUTH_PATH = path.join(HOME_DIR, ".pi", "agent", "auth.json");
+
 const CHATGPT_BACKEND_KEY = "chatgpt-wham";
+
 const CHATGPT_BACKEND_NAME = "ChatGPT subscription";
+
 const CHATGPT_USAGE_URL = "https://chatgpt.com/backend-api/wham/usage";
+
 const OPENROUTER_BACKEND_KEY = "openrouter-key";
+
 const OPENROUTER_BACKEND_NAME = "OpenRouter credits";
+
 const OPENROUTER_KEY_URL = "https://openrouter.ai/api/v1/key";
+
 const OPENROUTER_CREDITS_URL = "https://openrouter.ai/api/v1/credits";
+
 const INTERACTIVE_MODE_ERROR = `/${COMMAND_NAME} requires interactive mode`;
+
 const TITLE_TEXT = "Usage";
+
 const REFRESH_KEY = "r";
+
 const CLOSE_KEY = "q";
+
 const BG_WHITE = "\u001b[48;2;255;255;255m";
+
 const BG_RESET = "\u001b[49m";
+
 const COLOR_ACCENT = "accent" as const;
+
 const COLOR_DIM = "dim" as const;
+
 const COLOR_MUTED = "muted" as const;
+
 const COLOR_ERROR = "error" as const;
+
 const COLOR_SUCCESS = "success" as const;
+
 const COLOR_WARNING = "warning" as const;
+
 const COLOR_BORDER_MUTED = "borderMuted" as const;
+
 const METER_FILLED_CHAR = "▒";
+
 const METER_EMPTY_CHAR = "░";
+
 const OVERLAY_MIN_WIDTH = 88;
+
 const OVERLAY_MARGIN = 1;
+
 const OVERLAY_MAX_HEIGHT = "88%";
+
 const CARD_GAP = 1;
+
 const MIN_TWO_COLUMN_WIDTH = 88;
 
 function formatPlan(planType: string | undefined): string | undefined {
   if (!planType) return undefined;
+
   return planType
     .split(/[_\s-]+/)
     .filter(Boolean)
@@ -177,6 +239,7 @@ function formatDateTime(epochSeconds: number): string {
 
 function formatDuration(totalSeconds: number): string {
   const seconds = Math.max(0, Math.floor(totalSeconds));
+
   if (seconds < 60) return `${seconds}s`;
 
   const units: Array<[string, number]> = [
@@ -187,11 +250,13 @@ function formatDuration(totalSeconds: number): string {
 
   const parts: string[] = [];
   let remaining = seconds;
+
   for (const [label, unitSeconds] of units) {
     if (remaining >= unitSeconds) {
       parts.push(`${Math.floor(remaining / unitSeconds)}${label}`);
       remaining %= unitSeconds;
     }
+
     if (parts.length === 2) break;
   }
 
@@ -204,24 +269,31 @@ function formatDuration(totalSeconds: number): string {
 
 function formatReset(window: UsageWindow | null): string {
   if (!window) return "No reset information";
+
   return `Resets ${formatDateTime(window.reset_at)} · in ${formatDuration(window.reset_after_seconds)}`;
 }
 
 function toneForWindow(window: UsageWindow | null): UsageCardTone {
   if (!window) return "muted";
   const used = clampPercent(window.used_percent);
+
   if (used >= 90) return "error";
+
   if (used >= 75) return "warning";
+
   return "success";
 }
 
 function wrapLines(text: string, width: number): string[] {
   const lines: string[] = [];
+
   for (const line of text.split(/\r?\n/)) {
     const wrapped = wrapTextWithAnsi(line.length > 0 ? line : " ", Math.max(1, width));
+
     if (wrapped.length === 0) lines.push("");
     else lines.push(...wrapped);
   }
+
   return lines;
 }
 
@@ -246,11 +318,13 @@ function colorize(theme: Theme, tone: UsageCardTone, text: string): string {
 
 function padRight(text: string, width: number): string {
   const truncated = truncateToWidth(text, width);
+
   return truncated + " ".repeat(Math.max(0, width - visibleWidth(truncated)));
 }
 
 function joinColumns(left: string, right: string, width: number): string {
   const gap = Math.max(1, width - visibleWidth(left) - visibleWidth(right));
+
   return truncateToWidth(`${left}${" ".repeat(gap)}${right}`, width);
 }
 
@@ -284,6 +358,7 @@ function boxLines(
   const horizontal = theme.fg(borderTone, "─".repeat(Math.max(0, width - 2)));
   const top = theme.fg(borderTone, "┌") + horizontal + theme.fg(borderTone, "┐");
   const bottom = theme.fg(borderTone, "└") + horizontal + theme.fg(borderTone, "┘");
+
   const titleLine = padRight(
     `${accent ? theme.fg(COLOR_ACCENT, theme.bold(title)) : theme.bold(title)}`,
     Math.max(1, width - 4),
@@ -294,12 +369,14 @@ function boxLines(
 
   for (const line of bodyLines) {
     const wrapped = wrapLines(line, Math.max(1, width - 4));
+
     for (const wrappedLine of wrapped) {
       lines.push(`${theme.fg(borderTone, "│")} ${padRight(wrappedLine, width - 4)} ${theme.fg(borderTone, "│")}`);
     }
   }
 
   lines.push(bottom);
+
   return lines.map((line) => withWhiteBackground(padRight(line, width)));
 }
 
@@ -319,11 +396,20 @@ function hJoinBlocks(left: string[], right: string[], gap: number): string[] {
 
 function formatCurrency(value: number | null | undefined): string {
   if (!Number.isFinite(value ?? NaN)) return "unknown";
+
   return `$${Number(value).toFixed(2)}`;
 }
 
 function isResetCount(value: unknown): value is number {
-  return typeof value === "number" && Number.isSafeInteger(value) && value >= 0;
+  return Value.Check(ResetCountSchema, value);
+}
+
+function hasAvailableResetCount(payload: unknown): payload is AvailableResetCountProjection {
+  return Value.Check(AvailableResetCountProjectionSchema, payload);
+}
+
+function hasApplicableResetCount(payload: unknown): payload is ApplicableResetCountProjection {
+  return Value.Check(ApplicableResetCountProjectionSchema, payload);
 }
 
 export function normalizeChatGptSnapshot(response: ChatGptWhamUsageResponse, fetchedAt: number): BackendSnapshot {
@@ -358,6 +444,7 @@ export function normalizeChatGptSnapshot(response: ChatGptWhamUsageResponse, fet
   const resetCredits = response.rate_limit_reset_credits;
   const availableResets = resetCredits?.available_count;
   const applicableResets = resetCredits?.applicable_available_count;
+
   if (isResetCount(availableResets)) {
     cards.push({
       title: "Usage limit resets",
@@ -402,49 +489,53 @@ export function normalizeChatGptSnapshot(response: ChatGptWhamUsageResponse, fet
 function maskOpenRouterLabel(label: string | null | undefined): string | undefined {
   if (!label) return undefined;
   const trimmed = label.trim();
+
   if (trimmed.length <= 10) return "OpenRouter key";
+
   return `${trimmed.slice(0, 7)}…${trimmed.slice(-4)}`;
 }
 
-function parseOpenRouterAuthEntryKey(auth: unknown): string | null {
-  if (!auth || typeof auth !== "object") return null;
-  const openrouter = (auth as Record<string, unknown>).openrouter;
-  if (!openrouter || typeof openrouter !== "object") return null;
-  const key = (openrouter as Record<string, unknown>).key;
-  if (typeof key !== "string" || key.length === 0) return null;
+function parseOpenRouterAuthEntryKey(auth: PiAuth): string | null {
+  const key = auth.openrouter?.key;
+
+  if (!key) return null;
 
   if (key.startsWith("!")) {
     throw new Error("OpenRouter auth uses command-based key resolution; set OPENROUTER_API_KEY in env for /usage");
   }
 
   const envValue = process.env[key];
+
   if (envValue) return envValue;
+
   return key;
 }
 
 async function readCodexAccessToken(): Promise<string> {
   const authRaw = await fs.readFile(AUTH_PATH, "utf8");
-  const auth = JSON.parse(authRaw) as {
-    tokens?: { access_token?: string };
-  };
+  const auth = Value.Parse(CodexAuthSchema, JSON.parse(authRaw));
   const token = auth.tokens?.access_token;
+
   if (!token) {
     throw new Error(`Missing tokens.access_token in ${AUTH_PATH}`);
   }
+
   return token;
 }
 
 async function readOpenRouterToken(): Promise<string> {
   const envToken = process.env.OPENROUTER_MANAGEMENT_KEY || process.env.OPENROUTER_API_KEY;
+
   if (envToken) return envToken;
 
   try {
     const authRaw = await fs.readFile(PI_AUTH_PATH, "utf8");
-    const auth = JSON.parse(authRaw);
+    const auth = Value.Parse(PiAuthSchema, JSON.parse(authRaw));
     const token = parseOpenRouterAuthEntryKey(auth);
+
     if (token) return token;
   } catch (error) {
-    if ((error as NodeJS.ErrnoException)?.code !== "ENOENT") {
+    if (!(error instanceof Error) || !("code" in error) || error.code !== "ENOENT") {
       throw error;
     }
   }
@@ -452,25 +543,22 @@ async function readOpenRouterToken(): Promise<string> {
   throw new Error("Missing OpenRouter credentials (OPENROUTER_API_KEY env or ~/.pi/agent/auth.json openrouter entry)");
 }
 
-function tryExtractOpenRouterCreditsAmount(payload: unknown): number | null {
-  if (!payload || typeof payload !== "object") return null;
+function tryExtractOpenRouterCreditsAmount(payload: OpenRouterCreditsResponse): number | null {
+  const readNumber = (value: number | string | null | undefined): number | null => {
+    if (value === null || value === undefined) return null;
 
-  const readNumber = (value: unknown): number | null => {
-    if (typeof value === "number" && Number.isFinite(value)) return value;
-    if (typeof value === "string") {
-      const parsed = Number(value);
-      if (Number.isFinite(parsed)) return parsed;
-    }
-    return null;
+    const parsed = Number(value);
+
+    return Number.isFinite(parsed) ? parsed : null;
   };
 
-  const root = payload as Record<string, unknown>;
-  const data = root.data && typeof root.data === "object" ? (root.data as Record<string, unknown>) : null;
+  const tryRemainingFrom = (fields: OpenRouterCreditFields | undefined): number | null => {
+    if (!fields) return null;
 
-  const tryRemainingFrom = (obj: Record<string, unknown> | null): number | null => {
-    if (!obj) return null;
-    const total = readNumber(obj.total_credits) ?? readNumber(obj.totalCredits) ?? readNumber(obj.total);
-    const usage = readNumber(obj.total_usage) ?? readNumber(obj.usage) ?? readNumber(obj.used) ?? readNumber(obj.spent);
+    const total = readNumber(fields.total_credits) ?? readNumber(fields.totalCredits) ?? readNumber(fields.total);
+
+    const usage =
+      readNumber(fields.total_usage) ?? readNumber(fields.usage) ?? readNumber(fields.used) ?? readNumber(fields.spent);
 
     if (total !== null && usage !== null) {
       return Math.max(0, total - usage);
@@ -481,21 +569,24 @@ function tryExtractOpenRouterCreditsAmount(payload: unknown): number | null {
 
   // Prefer explicit "remaining" style fields first.
   const explicitCandidates = [
-    data?.remaining_credits,
-    data?.available_credits,
-    root.remaining_credits,
-    root.available_credits,
+    payload.data?.remaining_credits,
+    payload.data?.available_credits,
+    payload.remaining_credits,
+    payload.available_credits,
   ];
 
   for (const candidate of explicitCandidates) {
     const parsed = readNumber(candidate);
+
     if (parsed !== null) return parsed;
   }
 
-  const computedFromData = tryRemainingFrom(data);
+  const computedFromData = tryRemainingFrom(payload.data);
+
   if (computedFromData !== null) return computedFromData;
 
-  const computedFromRoot = tryRemainingFrom(root);
+  const computedFromRoot = tryRemainingFrom(payload);
+
   if (computedFromRoot !== null) return computedFromRoot;
 
   return null;
@@ -525,6 +616,7 @@ function normalizeOpenRouterSnapshot(
   ];
 
   const notes: string[] = [];
+
   if (keyData.expires_at) {
     notes.push(`Key expires at ${keyData.expires_at}`);
   }
@@ -551,16 +643,18 @@ const chatGptBackend: UsageBackend = {
     if (!model) return false;
     const provider = model.provider.toLowerCase();
     const id = model.id.toLowerCase();
+
     return (
       provider === "openai" ||
       provider === "chatgpt" ||
-      /^gpt-/.test(id) ||
+      id.startsWith("gpt-") ||
       /^o[1-9]/.test(id) ||
       id.startsWith("codex")
     );
   },
   async fetch(signal) {
     const token = await readCodexAccessToken();
+
     const response = await fetch(CHATGPT_USAGE_URL, {
       headers: {
         Authorization: `Bearer ${token}`,
@@ -573,8 +667,27 @@ const chatGptBackend: UsageBackend = {
       throw new Error(`Usage request failed: ${response.status} ${response.statusText}`);
     }
 
-    const data = (await response.json()) as ChatGptWhamUsageResponse;
-    return normalizeChatGptSnapshot(data, Date.now());
+    const payload: unknown = await response.json();
+    const data = Value.Parse(ChatGptWhamUsageResponseSchema, payload);
+
+    const availableCount = hasAvailableResetCount(payload)
+      ? payload.rate_limit_reset_credits.available_count
+      : undefined;
+
+    const applicableCount = hasApplicableResetCount(payload)
+      ? payload.rate_limit_reset_credits.applicable_available_count
+      : undefined;
+
+    return normalizeChatGptSnapshot(
+      {
+        ...data,
+        rate_limit_reset_credits: {
+          available_count: availableCount,
+          applicable_available_count: applicableCount,
+        },
+      },
+      Date.now(),
+    );
   },
 };
 
@@ -585,11 +698,13 @@ const openRouterBackend: UsageBackend = {
     if (!model) return false;
     const provider = model.provider.toLowerCase();
     const id = model.id.toLowerCase();
+
     return provider === "openrouter" || id.startsWith("openrouter/");
   },
   async fetch(signal) {
     try {
       const token = await readOpenRouterToken();
+
       const response = await fetch(OPENROUTER_KEY_URL, {
         headers: {
           Authorization: `Bearer ${token}`,
@@ -602,10 +717,11 @@ const openRouterBackend: UsageBackend = {
         throw new Error(`OpenRouter request failed: ${response.status} ${response.statusText}`);
       }
 
-      const data = (await response.json()) as OpenRouterKeyResponse;
+      const data = Value.Parse(OpenRouterKeyResponseSchema, await response.json());
 
       let accountCredits: number | null = null;
       const extraNotes: string[] = [];
+
       try {
         const creditsResponse = await fetch(OPENROUTER_CREDITS_URL, {
           headers: {
@@ -616,9 +732,14 @@ const openRouterBackend: UsageBackend = {
         });
 
         if (creditsResponse.ok) {
-          const creditsData = (await creditsResponse.json()) as unknown;
-          accountCredits = tryExtractOpenRouterCreditsAmount(creditsData);
-          if (accountCredits === null) {
+          try {
+            const creditsData = Value.Parse(OpenRouterCreditsResponseSchema, await creditsResponse.json());
+            accountCredits = tryExtractOpenRouterCreditsAmount(creditsData);
+
+            if (accountCredits === null) {
+              extraNotes.push("Account credits endpoint returned an unrecognized schema.");
+            }
+          } catch {
             extraNotes.push("Account credits endpoint returned an unrecognized schema.");
           }
         } else {
@@ -690,6 +811,7 @@ class UsageOverlayComponent {
 
     try {
       const snapshots = await Promise.all(usageBackends.map((backend) => backend.fetch(controller.signal)));
+
       if (controller.signal.aborted) return;
       this.state = {
         kind: "ready",
@@ -710,6 +832,7 @@ class UsageOverlayComponent {
     if (matchesKey(data, Key.escape) || matchesKey(data, CLOSE_KEY)) {
       this.abortController?.abort();
       this.done();
+
       return;
     }
 
@@ -725,11 +848,14 @@ class UsageOverlayComponent {
     const contentWidth = Math.max(40, fullWidth - 2);
     const borderFg = (text: string) => this.theme.fg(COLOR_ACCENT, text);
     const frameBg = (text: string) => withWhiteBackground(text);
+
     const frameLine = (content: string) =>
       frameBg(`${borderFg("┃")}${padRight(content, contentWidth)}${borderFg("┃")}`);
+
     const borderLine = (left: string, fill: string, right: string, label = "") => {
       const safeLabel = truncateToWidth(label, contentWidth, "");
       const fillWidth = Math.max(0, contentWidth - visibleWidth(safeLabel));
+
       return frameBg(`${borderFg(left)}${safeLabel}${borderFg(fill.repeat(fillWidth))}${borderFg(right)}`);
     };
 
@@ -743,6 +869,7 @@ class UsageOverlayComponent {
       body.push(this.theme.fg(COLOR_DIM, `Auth source: ${AUTH_PATH}`));
     } else {
       const latestFetchedAt = this.state.snapshots.reduce((max, snapshot) => Math.max(max, snapshot.fetchedAt), 0);
+
       if (latestFetchedAt > 0) {
         footerRight = this.theme.fg(COLOR_DIM, `Fetched ${new Date(latestFetchedAt).toLocaleTimeString()}`);
       }
@@ -751,9 +878,11 @@ class UsageOverlayComponent {
         const isCurrent = usageBackends.some(
           (backend) => backend.key === snapshot.backendKey && backend.matchesModel(this.model),
         );
+
         const headingLeft = isCurrent
           ? this.theme.fg(COLOR_ACCENT, this.theme.bold(`${snapshot.backendName} · current`))
           : this.theme.bold(snapshot.backendName);
+
         const accessIcon = snapshot.accessLabel
           ? /unavailable/i.test(snapshot.accessLabel)
             ? colorize(this.theme, "error", this.theme.bold(" ✗ "))
@@ -761,6 +890,7 @@ class UsageOverlayComponent {
               ? colorize(this.theme, "success", this.theme.bold(" ✓ "))
               : colorize(this.theme, snapshot.accessTone ?? COLOR_MUTED, this.theme.bold(" • "))
           : "";
+
         const heading = accessIcon
           ? `${padRight(headingLeft, Math.max(1, contentWidth - 3))}${accessIcon}`
           : headingLeft;
@@ -768,6 +898,7 @@ class UsageOverlayComponent {
         const metaLeft = snapshot.planLabel
           ? this.theme.fg(COLOR_MUTED, `Plan: ${snapshot.planLabel}`)
           : this.theme.fg(COLOR_MUTED, "Plan: unknown");
+
         const metaRight = snapshot.accountLabel
           ? this.theme.fg(COLOR_DIM, snapshot.accountLabel)
           : this.theme.fg(COLOR_DIM, "No account label");
@@ -777,8 +908,10 @@ class UsageOverlayComponent {
 
         const cardWidth =
           contentWidth >= MIN_TWO_COLUMN_WIDTH ? Math.max(30, Math.floor((contentWidth - CARD_GAP) / 2)) : contentWidth;
+
         const cardBlocks = snapshot.cards.map((card) => {
           const cardBody: string[] = [colorize(this.theme, card.tone ?? COLOR_MUTED, this.theme.bold(card.value))];
+
           if (card.progress) {
             cardBody.push(
               drawMeter(
@@ -790,9 +923,11 @@ class UsageOverlayComponent {
               ),
             );
           }
+
           if (card.subtitle) {
             cardBody.push(this.theme.fg(COLOR_DIM, card.subtitle));
           }
+
           return boxLines(this.theme, cardWidth, card.title, cardBody, {
             accent: isCurrent && index === 0,
           });
@@ -839,6 +974,7 @@ export default function usageExtension(pi: ExtensionAPI) {
     handler: async (_args, ctx) => {
       if (!ctx.hasUI) {
         ctx.ui.notify(INTERACTIVE_MODE_ERROR, COLOR_ERROR);
+
         return;
       }
 
@@ -850,7 +986,9 @@ export default function usageExtension(pi: ExtensionAPI) {
             () => done(undefined),
             ctx.model ? { id: ctx.model.id, provider: ctx.model.provider } : undefined,
           );
+
           void component.init();
+
           return component;
         },
         {
