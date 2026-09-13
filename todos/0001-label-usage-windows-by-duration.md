@@ -19,11 +19,11 @@ away as a five-hour limit.
 
 ## Acceptance Criteria
 
-- [ ] Derive each user-facing usage-window label from `limit_window_seconds`, not its primary/secondary position.
-- [ ] Label the observed Prolite weekly primary window correctly.
-- [ ] Preserve ordinary five-hour and weekly labels when their durations match.
-- [ ] Use a truthful fallback for unknown durations without inventing a known period.
-- [ ] Add focused normalization and render tests with Prolite and ordinary fixtures.
+- [x] Derive each user-facing usage-window label from `limit_window_seconds`, not its primary/secondary position.
+- [x] Label the observed Prolite weekly primary window correctly.
+- [x] Preserve ordinary five-hour and weekly labels when their durations match.
+- [x] Use a truthful fallback for unknown durations without inventing a known period.
+- [x] Add focused normalization and render tests with Prolite and ordinary fixtures.
 - [ ] Keep the first `pi-usage` release blocked until this is fixed and reviewed.
 
 ## Affected Files
@@ -48,3 +48,19 @@ provider behavior, credentials, or endpoint handling while resolving it.
   `secondary_window`. No account identifier or credential was retained.
 - Cover ordinary, Prolite, and unknown-duration normalization, plus ordinary →
   Prolite command rendering across refresh.
+
+### Validation
+
+- `npm run verify` — passed (34 tests).
+- `npm run check` — passed, including repository anti-slop rules.
+- `npm run test:coverage` — passed; `extensions/usage.ts` has 90.79% line
+  coverage and 98.24% function coverage.
+- `npm run pack:check` — passed; the package contains the declared usage
+  extension and expected public files only.
+- Temporary-home local Pi install loaded the `usage` extension command in RPC
+  mode.
+- Temporary `git://localhost` install pinned to commit `cce8572` checked out a
+  detached immutable commit and loaded the `usage` extension command in RPC
+  mode.
+- Automated render assertions cover both 80- and 120-column output. Human
+  screenshot review remains pending under the repository UI review policy.
