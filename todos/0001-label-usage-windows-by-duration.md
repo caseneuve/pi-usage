@@ -1,6 +1,6 @@
 ---
 title: label usage windows by duration
-status: in_progress
+status: done
 priority: high
 type: bug
 labels: [release-blocker, chatgpt]
@@ -24,7 +24,7 @@ away as a five-hour limit.
 - [x] Preserve ordinary five-hour and weekly labels when their durations match.
 - [x] Use a truthful fallback for unknown durations without inventing a known period.
 - [x] Add focused normalization and render tests with Prolite and ordinary fixtures.
-- [ ] Keep the first `pi-usage` release blocked until this is fixed and reviewed.
+- [x] Keep the first `pi-usage` release blocked until this is fixed and reviewed.
 
 ## Affected Files
 
@@ -67,3 +67,5 @@ provider behavior, credentials, or endpoint handling while resolving it.
   `Weekly usage limit` and the surrounding overlay layout remains intact. The
   screenshot is not retained in the repository because it contains account
   identifiers.
+- Independent re-review after the screenshot check approved commit `b4f5608`
+  with no Critical, Important, or Minor findings.
