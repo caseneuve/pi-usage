@@ -1,0 +1,14 @@
+# Changes to this file will be overwritten by Copier updates.
+# Review it with the template source before running `copier update`.
+_commit: 2dbc3ac
+_src_path: https://github.com/caseneuve/template-pi-package.git
+copyright_year: 2026
+extension_name: usage
+github_owner: caseneuve
+initial_version: 0.0.0
+package_description: Subscription usage and credit visibility for Pi.
+package_name: pi-usage
+pi_api_version: 0.85.1
+repository_name: pi-usage
+resource_types:
+- extensions

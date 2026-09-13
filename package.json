@@ -1,0 +1,58 @@
+{
+  "name": "pi-usage",
+  "version": "0.0.0",
+  "description": "Subscription usage and credit visibility for Pi.",
+  "type": "module",
+  "license": "MIT",
+  "copyright": "Copyright (c) 2026 Caseneuve",
+  "keywords": [
+    "pi-package",
+    "pi",
+    "agents",
+    "extensions"
+  ],
+  "files": [
+    "README.md",
+    "LICENSE",
+    "CHANGELOG.md",
+    "scripts",
+    "extensions"
+  ],
+  "pi": {
+    "extensions": ["./extensions/usage.ts"]
+  },
+  "scripts": {
+    "check": "biome check --write --error-on-warnings . && oxlint",
+    "check:ci": "biome check --error-on-warnings .",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:coverage": "vitest run --coverage",
+    "verify": "npm run check:ci && npm run typecheck && npm test",
+    "pack:check": "npm pack --dry-run --json",
+    "prepare": "node scripts/install-prek-hook.mjs"
+  },
+  "peerDependencies": {
+    "@earendil-works/pi-coding-agent": "*",
+    "@earendil-works/pi-tui": "*"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "2.3.5",
+    "@earendil-works/pi-coding-agent": "0.85.1",
+    "@earendil-works/pi-tui": "0.85.1",
+    "@j178/prek": "0.4.14",
+    "@oxlint/plugins": "1.82.0",
+    "@types/node": "24.10.1",
+    "@vitest/coverage-v8": "4.1.9",
+    "oxlint": "1.82.0",
+    "typescript": "5.9.3",
+    "vitest": "4.1.9"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/caseneuve/pi-usage.git"
+  },
+  "bugs": {
+    "url": "https://github.com/caseneuve/pi-usage/issues"
+  },
+  "homepage": "https://github.com/caseneuve/pi-usage#readme"
+}

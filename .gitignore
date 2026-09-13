@@ -1,0 +1,9 @@
+node_modules/
+coverage/
+.agents/
+.claude/
+skills-lock.json
+tools/oxlint/anti-slop/
+.reviews/
+*.log
+.DS_Store
