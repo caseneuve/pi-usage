@@ -205,6 +205,10 @@ const OVERLAY_MAX_HEIGHT = "88%";
 
 const CARD_GAP = 1;
 
+const FIVE_HOURS_IN_SECONDS = 5 * 60 * 60;
+
+const WEEK_IN_SECONDS = 7 * 24 * 60 * 60;
+
 const MIN_TWO_COLUMN_WIDTH = 88;
 
 function formatPlan(planType: string | undefined): string | undefined {
@@ -271,6 +275,14 @@ function formatReset(window: UsageWindow | null): string {
   if (!window) return "No reset information";
 
   return `Resets ${formatDateTime(window.reset_at)} · in ${formatDuration(window.reset_after_seconds)}`;
+}
+
+function formatUsageWindowTitle(limitWindowSeconds: number): string {
+  if (limitWindowSeconds === FIVE_HOURS_IN_SECONDS) return "5 hour usage limit";
+
+  if (limitWindowSeconds === WEEK_IN_SECONDS) return "Weekly usage limit";
+
+  return "Usage limit";
 }
 
 function toneForWindow(window: UsageWindow | null): UsageCardTone {
@@ -417,7 +429,7 @@ export function normalizeChatGptSnapshot(response: ChatGptWhamUsageResponse, fet
 
   if (response.rate_limit?.primary_window) {
     cards.push({
-      title: "5 hour usage limit",
+      title: formatUsageWindowTitle(response.rate_limit.primary_window.limit_window_seconds),
       value: formatRemainingPercent(response.rate_limit.primary_window.used_percent),
       subtitle: formatReset(response.rate_limit.primary_window),
       progress: {
@@ -430,7 +442,7 @@ export function normalizeChatGptSnapshot(response: ChatGptWhamUsageResponse, fet
 
   if (response.rate_limit?.secondary_window) {
     cards.push({
-      title: "Weekly usage limit",
+      title: formatUsageWindowTitle(response.rate_limit.secondary_window.limit_window_seconds),
       value: formatRemainingPercent(response.rate_limit.secondary_window.used_percent),
       subtitle: formatReset(response.rate_limit.secondary_window),
       progress: {

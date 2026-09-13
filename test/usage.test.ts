@@ -57,6 +57,21 @@ const responseFixture = {
   promo: null,
 };
 
+const proliteResponseFixture = {
+  ...responseFixture,
+  plan_type: "prolite",
+  rate_limit: {
+    ...responseFixture.rate_limit,
+    primary_window: {
+      used_percent: 25,
+      limit_window_seconds: 604_800,
+      reset_after_seconds: 520_490,
+      reset_at: 1_789_836_298,
+    },
+    secondary_window: null,
+  },
+};
+
 function snapshot(resetCredits: ResetCreditsFixture) {
   // SAFETY: Malformed reset-credit fixtures deliberately exceed the decoded production type to verify defensive rendering.
   return usage.normalizeChatGptSnapshot(
@@ -149,8 +164,9 @@ function createTestTui(requestRender: () => void): TUI {
 afterEach(() => vi.restoreAllMocks());
 
 describe("/usage reset credits", () => {
-  test("the registered command renders and refreshes reset counts using only GET requests", async () => {
+  test("the registered command renders ordinary and Prolite windows across refresh using only GET requests", async () => {
     let available = 3;
+    let chatGptResponse: typeof responseFixture | typeof proliteResponseFixture = responseFixture;
     const requests: Array<{ url: string; method: string }> = [];
     vi.spyOn(fs, "readFile").mockImplementation(async (file) => {
       if (String(file).endsWith("/.codex/auth.json")) {
@@ -170,7 +186,7 @@ describe("/usage reset credits", () => {
 
       if (url === "https://chatgpt.com/backend-api/wham/usage") {
         return Response.json({
-          ...responseFixture,
+          ...chatGptResponse,
           rate_limit_reset_credits: {
             available_count: available,
             applicable_available_count: available === 3 ? 0 : "malformed",
@@ -242,6 +258,8 @@ describe("/usage reset credits", () => {
     for (const width of [80, 120]) {
       const lines = component.render(width);
       const text = lines.join("\n");
+      expect(text).toContain("5 hour usage limit");
+      expect(text).toContain("Weekly usage limit");
       expect(text).toContain("Usage limit resets");
       expect(text).toContain("3 available");
       expect(text).toContain("Currently applicable: 0");
@@ -250,9 +268,12 @@ describe("/usage reset credits", () => {
     }
 
     available = 2;
+    chatGptResponse = proliteResponseFixture;
     const refreshed = nextReadyRender();
     component.handleInput?.("r");
     await refreshed;
+    expect(component.render(120).join("\n")).toContain("Weekly usage limit");
+    expect(component.render(120).join("\n")).not.toContain("5 hour usage limit");
     expect(component.render(120).join("\n")).toContain("2 available");
     expect(component.render(120).join("\n")).not.toContain("3 available");
     expect(component.render(120).join("\n")).not.toContain("Currently applicable");
@@ -264,6 +285,39 @@ describe("/usage reset credits", () => {
     ]);
     component.handleInput?.("q");
     expect(closed).toBe(true);
+  });
+});
+
+describe("normalizeChatGptSnapshot usage-window titles", () => {
+  test("labels ordinary windows from their five-hour and weekly durations", () => {
+    const result = usage.normalizeChatGptSnapshot(responseFixture, FETCHED_AT);
+
+    expect(result.cards.slice(0, 2).map((card) => card.title)).toEqual(["5 hour usage limit", "Weekly usage limit"]);
+  });
+
+  test("labels a Prolite weekly primary window as weekly", () => {
+    const result = usage.normalizeChatGptSnapshot(proliteResponseFixture, FETCHED_AT);
+
+    expect(result.planLabel).toBe("Prolite");
+    expect(result.cards.map((card) => card.title)).toEqual(["Weekly usage limit", "Credits remaining"]);
+  });
+
+  test("uses a generic title for an unrecognized duration", () => {
+    const result = usage.normalizeChatGptSnapshot(
+      {
+        ...proliteResponseFixture,
+        rate_limit: {
+          ...proliteResponseFixture.rate_limit,
+          primary_window: {
+            ...proliteResponseFixture.rate_limit.primary_window,
+            limit_window_seconds: 86_400,
+          },
+        },
+      },
+      FETCHED_AT,
+    );
+
+    expect(result.cards[0]?.title).toBe("Usage limit");
   });
 });
 

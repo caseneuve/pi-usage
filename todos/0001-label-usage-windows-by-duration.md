@@ -1,6 +1,6 @@
 ---
 title: label usage windows by duration
-status: open
+status: in_progress
 priority: high
 type: bug
 labels: [release-blocker, chatgpt]
@@ -35,3 +35,16 @@ away as a five-hour limit.
 
 This is intentionally deferred from the move-only extraction. Do not change
 provider behavior, credentials, or endpoint handling while resolving it.
+
+### Implementation plan and decisions
+
+- Recognize the API's exact five-hour (`18_000`) and weekly (`604_800`)
+  durations in one pure title-formatting helper.
+- Render unknown durations as the generic `Usage limit`; omitting an unrecognized
+  period is preferable to inventing a familiar period from window position.
+- Keep primary/secondary ordering unchanged; only title selection changes.
+- A sanitized live Prolite request on 2026-09-13 confirmed a `200` response with
+  `plan_type: prolite`, a `604_800`-second `primary_window`, and no
+  `secondary_window`. No account identifier or credential was retained.
+- Cover ordinary, Prolite, and unknown-duration normalization, plus ordinary →
+  Prolite command rendering across refresh.
