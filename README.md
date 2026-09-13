@@ -2,8 +2,6 @@
 
 Subscription usage and credit visibility for [Pi](https://pi.dev/).
 
-This is a package for [Pi](https://pi.dev/), the [`@earendil-works/pi-coding-agent`](https://www.npmjs.com/package/@earendil-works/pi-coding-agent).
-
 ## Resource
 
 - `extensions/usage.ts` provides the `/usage` overlay.
@@ -60,7 +58,6 @@ individual resources.
 For a new local checkout, initialize Git and create the committed lockfile once:
 
 ```bash
-git init -b master
 npm install
 ```
 
@@ -116,4 +113,4 @@ This project uses npm-compatible CalVer: `YYYY.M.D[.PATCH]`. Before a release:
 
 ## License
 
-[MIT](LICENSE), Copyright (c) 2026 Caseneuve.
+[MIT](LICENSE), Copyright (c) 2026 caseneuve.
