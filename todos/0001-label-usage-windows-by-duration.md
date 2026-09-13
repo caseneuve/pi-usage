@@ -62,5 +62,8 @@ provider behavior, credentials, or endpoint handling while resolving it.
 - Temporary `git://localhost` install pinned to commit `cce8572` checked out a
   detached immutable commit and loaded the `usage` extension command in RPC
   mode.
-- Automated render assertions cover both 80- and 120-column output. Human
-  screenshot review remains pending under the repository UI review policy.
+- Automated render assertions cover both 80- and 120-column output.
+- Human screenshot review on 2026-09-13 confirmed the Prolite card reads
+  `Weekly usage limit` and the surrounding overlay layout remains intact. The
+  screenshot is not retained in the repository because it contains account
+  identifiers.
