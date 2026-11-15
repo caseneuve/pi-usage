@@ -2,80 +2,92 @@
 
 Subscription usage and credit visibility for [Pi](https://pi.dev/).
 
-## Resource
+## Resource and usage
 
-- `extensions/usage.ts` provides the `/usage` overlay.
+`extensions/usage.ts` provides `/usage` in Pi's interactive TUI (not RPC/print).
 
-The overlay fetches data only when opened. It supports the ChatGPT subscription
-`/backend-api/wham/usage` endpoint and OpenRouter `/api/v1/key` plus
-`/api/v1/credits` endpoints.
+- `/usage` — open the dashboard; fetch only on opening
+- `r` — refresh; superseded requests are cancelled
+- `q` or `esc` — close; pending requests are cancelled
 
-## Usage
+Supported backends are ChatGPT subscription `/backend-api/wham/usage` and
+OpenRouter `/api/v1/key` plus best-effort `/api/v1/credits`. All requests are
+GET-only; opening/refreshing does not consume resets. An unavailable backend
+stays visible without hiding another backend's useful data.
 
-- `/usage` — open the overlay
-- `r` — refresh
-- `q` or `esc` — close
+ChatGPT reads `tokens.access_token` from `~/.codex/auth.json`. OpenRouter uses
+`OPENROUTER_MANAGEMENT_KEY`, then `OPENROUTER_API_KEY`, then the `openrouter.key`
+entry in `~/.pi/agent/auth.json` (a literal key or the name of an environment
+variable). Command-based key resolution is not supported; set an environment
+variable instead. These existing HOME-based paths are unchanged; the dashboard
+does not refresh credentials, execute credential commands, or use model-provider
+auth resolution. Do not share auth files or account identifiers in bug reports.
 
-It reads a ChatGPT subscription token from `~/.codex/auth.json`. OpenRouter
-uses `OPENROUTER_MANAGEMENT_KEY` or `OPENROUTER_API_KEY`, falling back to the
-`openrouter` entry in `~/.pi/agent/auth.json`. Command-based OpenRouter key
-resolution is not supported; set an environment variable instead.
-
-The display includes timed usage windows, separate available and currently
-applicable usage-limit reset counts when supplied, ChatGPT add-on credits, and
-OpenRouter key/account credit information. Opening and refreshing are GET-only
-and do not consume resets. Model-to-backend highlighting is heuristic.
+The white-panel display includes duration-labelled usage windows, separate
+available/currently applicable reset counts when supplied, ChatGPT add-on
+credits, and OpenRouter account credit/daily spend information. Missing windows
+are not invented; unknown balances remain unknown. Model highlighting is
+heuristic. Short terminals can clip a tall dashboard; widen/enlarge the terminal
+to see all cards. Refresh and close remain available while loading.
 
 ## Install
 
-Install a reviewed immutable release in normal use:
+Compatibility target: **Pi 1.5.2, Node >=22.19.0**. Host-provided API peers remain
+`"*"` per Pi's package contract; this is not a claim of testing every host version.
+
+Review extension source before loading: it runs with Pi's OS permissions and
+can read credentials and access the network. For a local checkout:
+
+```bash
+cd /absolute/path/to/pi-usage
+npm ci
+pi install /absolute/path/to/pi-usage       # personal package declaration
+# Alternatively, from a separate project:
+pi install -l /absolute/path/to/pi-usage    # project .pi/settings.json
+```
+
+Local paths load in place, without copying. Pi does not install or modify local
+package dependencies; checkout setup is a separate step. Project packages load
+only after project trust is granted. Declining trust skips project resources;
+`--approve` is a one-process trust override, not a sandbox. Restart or `/reload`
+after resource/settings changes.
+
+For reproducible managed installs, use a reviewed immutable tag or commit:
 
 ```bash
 pi install git:github.com/caseneuve/pi-usage@<reviewed-tag-or-commit-sha>
 ```
 
-Use an annotated release tag or reviewed commit SHA. Do not use a moving branch
-name for a reproducible installation.
+Pi installs production dependencies for managed Git/npm sources, suppressing
+automatic host peers. The guarded `prepare` helper exits successfully when the
+local development-only Prek binary is absent; production installs need no Prek.
 
-Pi filters package resources through an object entry in `packages`. Omit a
-resource key to load everything of that type; use an empty array to disable it.
-For example:
+### Filters and identity
+
+Package object filters narrow the explicit manifest; use manifest-relative paths:
 
 ```json
 {
   "packages": [{
-    "source": "git:github.com/caseneuve/pi-usage@<reviewed-tag-or-commit-sha>",
+    "source": "/absolute/path/to/pi-usage",
     "extensions": ["extensions/usage.ts"]
   }]
 }
 ```
 
-Use `pi config` (or `pi config -l` for project settings) to enable or disable
-individual resources.
+Omitting `extensions` loads all declared extensions; `"extensions": []` disables
+them. Filters cannot expose undeclared resources. `pi config` (or `pi config -l`)
+controls resources interactively. Local package identity is its resolved absolute
+path; another checkout, a managed Git install, or an old broad extension loader
+can still duplicate `/usage`. Do not install both implementations.
 
-## Development
+`pi update` alone updates Pi itself. `pi update --extensions` reconciles packages;
+local source changes belong to Git/checkouts. Pinned refs do not advance to new
+refs. To roll back, restore the previous reviewed checkout/ref and reload or
+restart. `pi remove [-l] /absolute/path/to/pi-usage` removes that declaration;
+it does not delete the checkout.
 
-For a new local checkout, initialize Git and create the committed lockfile once:
-
-```bash
-npm install
-```
-
-Before committing the initial lockfile, install Dillon Mulroy's current
-anti-slop skill rather than copying a plugin from another checkout:
-
-```bash
-npx skills add dmmulroy/anti-slop --skill install-anti-slop
-```
-
-Then use the installed `install-anti-slop` skill. It installs its plugin locally,
-updates the matching Oxlint development dependencies, merges rules into the
-tracked `oxlint.config.ts`, and validates the result.
-`tools/oxlint/anti-slop/` is gitignored: commit only repository-specific
-configuration, dependency changes, and the lockfile. Bootstrap the plugin after
-each fresh clone before running local checks.
-
-After the lockfile is committed, use clean installs:
+## Development and provenance
 
 ```bash
 npm ci
@@ -84,32 +96,36 @@ npm run test:coverage
 npm run pack:check
 ```
 
-`npm install` runs `prepare`, which installs the [Prek](https://github.com/j178/prek)
-hook when the development dependency is present. Production-only Pi Git installs
-skip hook installation safely. The hook runs Biome and may apply safe formatting
-fixes. Review and stage any hook changes before committing again.
+Biome owns portable formatting/lint (`check` applies safe fixes, `check:ci` does
+not mutate); TypeScript checks exact host API pins and Vitest provides V8
+coverage. `prepare` installs the local Prek hook only when its development binary
+exists. The hook runs Biome; review/stage any fixes. No private Oxlint/plugin
+checkout is required by public scripts, CI, hooks or runtime. Separate local
+centralized anti-slop checks use an explicit scope and baseline/candidate
+fingerprints; they are not part of the portable gate.
 
-Run all hooks explicitly with:
+The npm `files` allowlist ships only the extension, public docs/license and the
+guarded lifecycle script; tests, todos, local settings, coverage and tooling are
+not runtime resources. Reviewed root `.pi/docs/**` notes may be tracked; other
+root `.pi` state remains ignored, without reopening nested globally ignored
+`.pi` directories. Git ignores and npm filtering are independent.
 
-```bash
-npx prek run --all-files
-```
+`.copier-answers.yml` records original generation from template v0.3.0. This
+migration manually adopts reviewed local Copier baseline `0835070` plus ignore
+correction `7174522` (unpushed); it is **not** a remote `copier update`. Package
+metadata, implementation and tests remain repository-owned.
 
-`npm run check` applies Biome formatting/lint fixes and runs Oxlint with the
-required local anti-slop plugin. `npm run typecheck` checks the pinned Pi API,
-and Vitest provides extension tests and coverage. `npm run check:ci` intentionally
-runs only the non-mutating Biome baseline; CI runs type checking and tests
-separately without installing the local plugin.
+Migration evidence is maintained separately from shipped resources. Fixture UI
+proof does not establish real authenticated external-provider API compatibility;
+those checks need separately authorized credentials.
 
 ## Releases
 
-This project uses npm-compatible CalVer: `YYYY.M.D[.PATCH]`. Before a release:
-
-1. Run `npm run verify`, `npm run test:coverage`, and `npm run pack:check`.
-2. Update `CHANGELOG.md` and `package.json` with the release version.
-3. Merge approved work to `master`.
-4. Create an annotated tag named `v<version>`.
-5. Verify installation with that immutable tag or a reviewed commit SHA.
+Use npm-compatible three-component CalVer `YYYY.M.D`, annotated `v<version>` tags,
+and reviewed immutable installation refs. Agree a valid same-day version policy
+before releasing; four-component versions are not npm SemVer. Run verify,
+coverage, pack and installation checks before an approved release. No migration
+work authorizes publication, push, merge, tag or user settings cutover.
 
 ## License
 

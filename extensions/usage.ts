@@ -822,7 +822,23 @@ class UsageOverlayComponent {
     this.requestRender(true);
 
     try {
-      const snapshots = await Promise.all(usageBackends.map((backend) => backend.fetch(controller.signal)));
+      const snapshots = await Promise.all(
+        usageBackends.map(async (backend): Promise<BackendSnapshot> => {
+          try {
+            return await backend.fetch(controller.signal);
+          } catch (error) {
+            return {
+              backendKey: backend.key,
+              backendName: backend.name,
+              accessLabel: "Usage: unavailable",
+              accessTone: "warning",
+              cards: [],
+              notes: [error instanceof Error ? error.message : String(error)],
+              fetchedAt: Date.now(),
+            };
+          }
+        }),
+      );
 
       if (controller.signal.aborted) return;
       this.state = {
@@ -842,7 +858,7 @@ class UsageOverlayComponent {
 
   handleInput(data: string): void {
     if (matchesKey(data, Key.escape) || matchesKey(data, CLOSE_KEY)) {
-      this.abortController?.abort();
+      this.dispose();
       this.done();
 
       return;
@@ -853,11 +869,15 @@ class UsageOverlayComponent {
     }
   }
 
+  dispose(): void {
+    this.abortController?.abort();
+  }
+
   invalidate(): void {}
 
   render(width: number): string[] {
-    const fullWidth = Math.max(48, width);
-    const contentWidth = Math.max(40, fullWidth - 2);
+    const fullWidth = Math.max(1, width);
+    const contentWidth = Math.max(1, fullWidth - 2);
     const borderFg = (text: string) => this.theme.fg(COLOR_ACCENT, text);
     const frameBg = (text: string) => withWhiteBackground(text);
 
@@ -984,7 +1004,7 @@ export default function usageExtension(pi: ExtensionAPI) {
   pi.registerCommand(COMMAND_NAME, {
     description: "Open an on-demand usage overlay for configured backends",
     handler: async (_args, ctx) => {
-      if (!ctx.hasUI) {
+      if (ctx.mode !== "tui") {
         ctx.ui.notify(INTERACTIVE_MODE_ERROR, COLOR_ERROR);
 
         return;

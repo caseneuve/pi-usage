@@ -7,3 +7,8 @@ tools/oxlint/anti-slop/
 .reviews/
 *.log
 .DS_Store
+
+# Shared root notes only; do not reopen nested globally ignored .pi directories.
+!/.pi/
+.pi/*
+!.pi/docs/

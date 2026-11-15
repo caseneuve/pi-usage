@@ -1,8 +1,9 @@
 import { promises as fs } from "node:fs";
 import type { ExtensionAPI, ExtensionCommandContext, ExtensionUIContext, Theme } from "@earendil-works/pi-coding-agent";
-import { type Component, type Terminal, type TUI, visibleWidth } from "@earendil-works/pi-tui";
+import { type Component, visibleWidth } from "@earendil-works/pi-tui";
 import { afterEach, describe, expect, test, vi } from "vitest";
 import * as usage from "../extensions/usage.ts";
+import { createTestTui } from "./tui-fixture.ts";
 
 type CustomCallback = Parameters<ExtensionUIContext["custom"]>[0];
 
@@ -87,81 +88,10 @@ function resetCard(resetCredits: ResetCreditsFixture) {
   return snapshot(resetCredits).cards.find((card) => card.title === "Usage limit resets");
 }
 
-function createTestTui(requestRender: () => void): TUI {
-  const terminal: Terminal = {
-    start() {},
-    stop() {},
-    async drainInput() {},
-    write() {},
-    get columns() {
-      return 120;
-    },
-    get rows() {
-      return 40;
-    },
-    get kittyProtocolActive() {
-      return false;
-    },
-    moveBy() {},
-    hideCursor() {},
-    showCursor() {},
-    clearLine() {},
-    clearFromCursor() {},
-    clearScreen() {},
-    setTitle() {},
-    setProgress() {},
-  };
-
-  return {
-    mode: "regular",
-    children: [],
-    terminal,
-    fullRedraws: 0,
-    render() {
-      return [];
-    },
-    invalidate() {},
-    addChild() {},
-    removeChild() {},
-    clear() {},
-    getShowHardwareCursor() {
-      return false;
-    },
-    setShowHardwareCursor() {},
-    getClearOnShrink() {
-      return false;
-    },
-    setClearOnShrink() {},
-    setFocus() {},
-    showOverlay() {
-      throw new Error("Overlays are not used in this test");
-    },
-    hideOverlay() {},
-    hasOverlay() {
-      return false;
-    },
-    start() {},
-    stop() {},
-    renderNow() {},
-    requestRender,
-    addInputListener() {
-      return () => {};
-    },
-    removeInputListener() {},
-    onTerminalColorSchemeChange() {
-      return () => {};
-    },
-    setTerminalColorSchemeNotifications() {},
-    async queryTerminalBackgroundColor() {
-      return undefined;
-    },
-    async queryTerminalColorScheme() {
-      return undefined;
-    },
-  };
-}
-
-afterEach(() => vi.restoreAllMocks());
+afterEach(() => {
+  vi.restoreAllMocks();
+  vi.unstubAllEnvs();
+});
 
 describe("/usage reset credits", () => {
   test("the registered command renders ordinary and Prolite windows across refresh using only GET requests", async () => {
@@ -234,6 +164,7 @@ describe("/usage reset credits", () => {
     // SAFETY: The command test double supplies every context member the /usage handler reads.
     await handler("", {
       hasUI: true,
+      mode: "tui",
       model: { provider: "openai-codex", id: "gpt-5" },
       ui: {
         async custom(factory) {

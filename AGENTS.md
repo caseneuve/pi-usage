@@ -16,10 +16,10 @@ Do not redesign behavior or expand platform support without an explicit todo.
 
 ## Tooling
 
-- In a newly generated checkout, run `git init -b master && npm install` once, bootstrap anti-slop as described below, and commit the resulting `package-lock.json`. Thereafter use npm and the committed lockfile: `npm ci` for clean installs.
-- Biome owns formatting and baseline linting. Oxlint runs additional extension checks for TypeScript extensions. Use 2-space indentation; do not add Prettier or ESLint.
-- Bootstrap the current anti-slop rules through Dillon Mulroy's upstream skill; do not copy them from another checkout. If `tools/oxlint/anti-slop/index.ts` is absent, run `npx skills add dmmulroy/anti-slop --skill install-anti-slop`, then use the installed `install-anti-slop` skill to configure this repository before changing extension code. The downloaded plugin is local tooling and must remain untracked under `tools/oxlint/anti-slop/`; commit only repository-specific Oxlint configuration and dependency changes.
-- `npm run check` may write safe Biome fixes and requires the locally installed anti-slop plugin. `npm run check:ci` must not modify files and intentionally runs only the committed Biome baseline; CI runs type checking and tests separately, but does not install or run anti-slop.
+- Use npm and the committed lockfile: `npm ci` for clean installs. Target Node >=22.19.0 and exact development Pi 1.5.2 APIs; keep host peers at `"*"`.
+- Biome owns formatting and baseline linting. Use 2-space indentation; do not add Prettier or ESLint.
+- `npm run check` may write safe Biome fixes. `npm run check:ci` must not modify files. Portable checks, hooks and CI must not require private anti-slop tooling or paths.
+- Run any separate centralized local anti-slop checks against an explicit owned file scope; retain baseline/candidate diagnostics and require zero introduced findings. Do not vendor or bootstrap rules into this package; preserve existing ignored local tooling.
 - Prek installs through a guarded `prepare` script during development and runs the mutating Biome check before commits. Production-only Pi Git installs skip hook installation.
 - `npm run typecheck` verifies the pinned development Pi API surface.
 - Use Vitest for tests and V8 coverage for extension code.
@@ -37,9 +37,21 @@ Do not redesign behavior or expand platform support without an explicit todo.
 
 - Keep the `pi` manifest explicit. Package filtering must be documented and experimental resources must be manifest-excluded.
 
+## Shared notes and provenance
+
+Only reviewed root `.pi/docs/**` notes may be tracked; root settings and other
+local `.pi` state remain ignored. Do not reopen nested globally ignored `.pi`
+directories. Git ignores, lint scope and npm files allowlists are separate.
+
+The v0.3.0 Copier answers record original generation. Pi 1.5.2 tooling is a
+manual adoption of reviewed local baseline 0835070 plus ignore correction
+7174522 (both unpushed), not a remote template update.
+
 ## Release procedure
 
-Use npm-compatible CalVer `YYYY.M.D[.PATCH]`; release tags are annotated `v<version>` tags.
+Use npm-compatible three-component CalVer `YYYY.M.D`; release tags are annotated
+`v<version>` tags. Same-day version policy requires owner agreement; do not
+publish four-component versions.
 
 1. Complete automated checks and focused local/Git install validation.
 2. Update `CHANGELOG.md` and `package.json`.
