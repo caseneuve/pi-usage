@@ -1,6 +1,6 @@
 ---
 title: resolve anti slop lint findings
-status: completed
+status: done
 priority: high
 type: refactor
 labels: [release-blocker, tooling]
@@ -71,3 +71,20 @@ findings.
 - Commit `c72808e` addressed the finding; independent re-review by
   `usage-review` approved the branch with no remaining findings. Review:
   `.reviews/dev-0004-resolve-anti-slop-2026-09-13-174744.md`.
+
+## Reconciliation (2026-11-15)
+
+Normalize the already reviewed implementation's terminal status from `completed` to
+`done`; this is not new implementation or release authorization. Historical checked
+criteria and validation records remain intact. Done migration `0006` and current master
+`14aafe7891111c64327634be8c65e618b3e70e46` preserve the boundary-parsing/readability
+work with a separate central runner baseline/candidate result of zero diagnostics.
+Fresh non-mutating check:ci/typecheck/tests pass (44 tests).
+
+Evidence: `~/.cache/pi-migration/evidence/usage/{review,handoff}.md`,
+`usage/reviewer/ledger.md` and `todo-reconciliation/pi-usage-checks.log` under that
+evidence root. The vendored-plugin/old-API commands above describe the 2026-09
+validation, not instructions to reintroduce vendoring or private tooling into current
+scripts/CI. Current approved policy supersedes that workflow. Real authenticated
+external-provider compatibility remains separately unverified; fixture UI/request
+proof is not authentication or current production-schema proof.
